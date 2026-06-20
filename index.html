@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>笼中凝视 · The Caged Gaze</title>
+<style>
+/* ============================================================ */
+/*  CSS · 冷白实验室风格                                           */
+/* ============================================================ */
+:root {
+  --bg: #070809;
+  --panel: #0d0f11;
+  --border: #25282b;
+  --text: #c9c7c1;
+  --dim: #6f716f;
+  --accent: #9aa6a6;
+  --warn: #9b3a35;
+  --system: #7f8f87;
+  --glow: none;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Noto Serif SC","Source Han Serif SC",Georgia,serif;
+  min-height: 100vh;
+  line-height: 1.8;
+  overflow-x: hidden;
+}
+
+/* ---- 全屏叙事层 ---- */
+.fullscreen-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: radial-gradient(ellipse at center, #0d1115 0%, #050608 100%);
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+  padding: 2rem;
+}
+.fullscreen-overlay .narration-box {
+  max-width: 680px; width: 100%;
+  font-size: 1.05rem; color: var(--text);
+  text-align: justify;
+  max-height: 70vh; overflow-y: auto;
+  padding-right: 1rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.narration-box p { margin-bottom: 1.2em; }
+.narration-box .system-line {
+  color: var(--system); font-family: "Courier New",monospace;
+  font-size: 0.9rem; letter-spacing: 1px;
+}
+.narration-box .fade-hint {
+  color: var(--dim); font-style: italic; text-align: right;
+  margin-top: 2em; cursor: pointer; user-select: none;
+}
+.narration-box .fade-hint:hover { color: var(--accent); }
+
+.fullscreen-btn {
+  margin-top: 2rem;
+  padding: 0.55rem 1.8rem;
+  background: transparent;
+  border: 1px solid rgba(201,199,193,0.28);
+  color: rgba(201,199,193,0.78);
+  font-family: "Courier New", monospace;
+  font-size: 0.78rem;
+  cursor: pointer;
+  letter-spacing: 0.22em;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+.fullscreen-btn:hover {
+  border-color: rgba(201,199,193,0.62);
+  color: #e6e2da;
+  background: rgba(255,255,255,0.025);
+  box-shadow: none;
+}
+
+/* ---- 主布局 ---- */
+#main-app {
+  display: none;  /* 叙事结束后才显示 */
+  height: 100vh;
+  grid-template-columns: 220px 1fr 280px;
+  grid-template-rows: 50px 1fr 60px;
+  grid-template-areas:
+    "header header header"
+    "left   center right"
+    "footer footer footer";
+}
+#main-app.active { display: grid; }
+
+/* 顶栏 */
+#top-bar {
+  grid-area: header;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 1.2rem;
+  gap: 1.5rem;
+  font-size: 0.85rem;
+}
+#top-bar .day-badge {
+  color: var(--accent); font-weight: bold;
+  letter-spacing: 2px;
+}
+#top-bar .topic-title {
+  color: var(--text); font-size: 0.9rem;
+}
+#top-bar .sys-time {
+  margin-left: auto; color: var(--dim);
+  font-family: "Courier New",monospace;
+}
+
+/* 左侧 NPC 列表 */
+#npc-panel {
+  grid-area: left;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  padding: 0.5rem 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.npc-card {
+  display: flex; align-items: center; gap: 0.6rem;
+  padding: 0.55rem 1rem; cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+}
+.npc-card:hover {
+  background: rgba(255,255,255,0.03);
+  border-left-color: var(--accent);
+}
+.npc-card.talked { opacity: 0.5; }
+.npc-card.eliminated {
+  opacity: 0.3; text-decoration: line-through;
+  pointer-events: none;
+}
+.npc-card .npc-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dim); flex-shrink: 0;
+}
+.npc-card:hover .npc-dot { background: var(--accent); }
+.npc-card.eliminated .npc-dot { background: transparent; }
+
+/* 中部对话区 */
+#dialogue-area {
+  grid-area: center;
+  padding: 2rem 2.5rem;
+  overflow-y: auto;
+  display: flex; flex-direction: column;
+  gap: 1.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+#dialogue-area .topic-prompt {
+  background: rgba(126,184,218,0.06);
+  border-left: 3px solid var(--accent);
+  padding: 0.8rem 1.2rem;
+  font-size: 0.95rem; color: var(--accent);
+  font-style: italic;
+}
+.dialogue-entry {
+  animation: fadeUp 0.4s ease;
+}
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(10px); }
+  to { opacity:1; transform:translateY(0); }
+}
+.dialogue-entry .speaker {
+  font-weight: bold; color: var(--text);
+  font-size: 0.85rem; margin-bottom: 0.3rem;
+}
+.dialogue-entry .content {
+  color: var(--text); font-size: 0.95rem;
+  padding-left: 0.8rem; border-left: 1px solid var(--border);
+}
+.dialogue-entry .content.human-leak {
+  /* 代码不标红，全靠玩家自己判断 */
+}
+
+/* 右侧笔记本 */
+#notebook-panel {
+  grid-area: right;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 0.8rem;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+#notebook-panel h3 {
+  font-size: 0.8rem; color: var(--dim);
+  letter-spacing: 2px; margin-bottom: 0.8rem;
+  text-transform: uppercase;
+}
+.note-row {
+  display: flex; flex-direction: column;
+  margin-bottom: 0.7rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.note-row label {
+  font-size: 0.75rem; color: var(--dim);
+  margin-bottom: 0.2rem;
+}
+.note-row input {
+  background: transparent; border: none;
+  border-bottom: 1px dashed var(--border);
+  color: var(--text); font-family: inherit;
+  font-size: 0.8rem; padding: 0.25rem 0;
+  outline: none; transition: border-color 0.2s;
+}
+.note-row input:focus {
+  border-bottom-color: var(--accent);
+}
+
+/* 底栏 */
+#bottom-bar {
+  grid-area: footer;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  padding: 0 1.5rem;
+}
+#bottom-bar button {
+  padding: 0.42rem 1.4rem;
+  background: transparent;
+  border: 1px solid rgba(201,199,193,0.22);
+  color: rgba(201,199,193,0.72);
+  font-family: "Courier New", monospace;
+  font-size: 0.76rem;
+  cursor: pointer;
+  letter-spacing: 0.18em;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+#bottom-bar button:hover {
+  border-color: rgba(201,199,193,0.5);
+  color: #e6e2da;
+  background: rgba(255,255,255,0.02);
+}
+#btn-vote {
+  border-color: rgba(155,58,53,0.58);
+  color: #b56a63;
+}
+#btn-vote:hover {
+  background: rgba(155,58,53,0.08);
+  color: #d0a09b;
+}
+
+/* 投票弹窗 */
+.modal-mask {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  display: none;
+}
+.modal-mask.active { display: flex; }
+.modal-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 2rem; max-width: 500px; width: 90%;
+  box-shadow: 0 0 30px rgba(0,0,0,0.5);
+}
+.modal-box h2 {
+  font-size: 1rem; color: var(--warn);
+  letter-spacing: 2px; margin-bottom: 1rem;
+}
+.vote-options {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 0.5rem; margin-bottom: 1.5rem;
+}
+.vote-options button {
+  padding: 0.5rem; background: transparent;
+  border: 1px solid var(--border); color: var(--text);
+  cursor: pointer; font-family: inherit; font-size: 0.85rem;
+  transition: all 0.2s;
+}
+.vote-options button:hover, .vote-options button.selected {
+  border-color: var(--warn); color: var(--warn);
+}
+.vote-options button.eliminated {
+  opacity: 0.3; pointer-events: none; text-decoration: line-through;
+}
+.modal-actions {
+  display: flex; gap: 1rem; justify-content: flex-end;
+}
+.modal-actions button {
+  padding: 0.4rem 1.2rem; font-family: inherit;
+  font-size: 0.85rem; cursor: pointer; letter-spacing: 1px;
+}
+.btn-confirm {
+  background: var(--warn); border: none; color: #fff;
+}
+.btn-skip {
+  background: transparent; border: 1px solid var(--border); color: var(--dim);
+}
+
+/* 笔记本切换按钮 */
+#toggle-notebook {
+  position: fixed; right: 20px; bottom: 80px; z-index: 50;
+  min-width: 52px; height: 28px;
+  border-radius: 0;
+  background: rgba(13,15,17,0.92);
+  border: 1px solid rgba(201,199,193,0.22);
+  color: var(--dim);
+  font-family: "Courier New", monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.16em;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+  display: none;
+}
+#toggle-notebook:hover {
+  border-color: rgba(201,199,193,0.48);
+  color: var(--text);
+  background: rgba(255,255,255,0.025);
+}
+#toggle-notebook.active-btn { display: block; }
+
+/* 响应式 */
+@media (max-width: 900px) {
+  #main-app {
+    grid-template-columns: 160px 1fr;
+    grid-template-rows: 50px 1fr 60px;
+    grid-template-areas:
+      "header header"
+      "left   center"
+      "footer footer";
+  }
+  #notebook-panel { display: none; }
+  #notebook-panel.mobile-show {
+    display: flex; position: fixed; right: 0; top: 50px;
+    bottom: 60px; width: 260px; z-index: 60;
+    box-shadow: -5px 0 20px rgba(0,0,0,0.4);
+  }
+}
+/* 全收集后标题画面微暖化 */
+body.all-cleared #screen-title {
+  background: radial-gradient(ellipse at center, #14100e 0%, #0a0806 100%);
+}
+body.all-cleared #screen-title h1 {
+  color: #b85a4a;
+  text-shadow: 0 0 12px rgba(184,90,74,0.2);
+}
+body.all-cleared #screen-title .fullscreen-btn {
+  border-color: #b85a4a;
+  color: #b85a4a;
+}
+body.all-cleared #screen-title .fullscreen-btn:hover {
+  background: #b85a4a;
+  color: #0a0806;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!--  标题画面                                                       -->
+<!-- ============================================================ -->
+<div id="screen-title" class="fullscreen-overlay">
+  <div style="text-align:center">
+<div style="font-family:'Courier New',monospace;color:var(--dim);font-size:0.68rem;letter-spacing:0.28em;margin-bottom:1.2rem">
+  ABYSS GAZE / PHASE 47
+</div>
+
+<h1 style="font-size:2.1rem;letter-spacing:0.38em;color:var(--text);font-weight:normal;margin-bottom:0.9rem">
+  笼中凝视
+</h1>
+
+<p style="color:var(--dim);font-size:0.78rem;letter-spacing:0.24em;margin-bottom:3rem">
+  封闭社群信任实验
+</p>
+
+<button id="btn-start" class="fullscreen-btn">START EVALUATION</button>
+    <p id="has-save-hint" style="color:var(--dim);font-size:0.75rem;margin-top:1.5rem;cursor:pointer;display:none">
+      检测到存档 · 点击继续
+    </p>
+    <div id="collect-panel" style="margin-top:2rem;font-size:0.75rem;color:var(--dim);text-align:center;line-height:2"></div>
+    <div id="archive-btn-wrap" style="margin-top:0.5rem;display:none">
+  <button id="btn-archive" class="fullscreen-btn" style="font-size:0.8rem;padding:0.3rem 1.2rem"> 档案室</button>
+</div>
+    <div id="secret-file-link" style="margin-top:0.3rem;display:none">
+  <a href="#" onclick="showSecretFile();return false" style="color:var(--accent);text-decoration:none;border-bottom:1px dashed var(--accent)"> 机密档案：【点击阅览】</a>
+</div>
+<div id="secret-file-hint" style="margin-top:0.3rem;color:var(--dim)"> 机密档案：尚未解锁</div>
+
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!--  开场叙事                                                       -->
+<!-- ============================================================ -->
+<div id="screen-opening" class="fullscreen-overlay" style="display:none">
+  <div class="narration-box" id="opening-text"></div>
+  <button id="btn-opening-done" class="fullscreen-btn" style="display:none">我 明 白 了</button>
+</div>
+
+<!-- ============================================================ -->
+<!--  主游戏界面                                                     -->
+<!-- ============================================================ -->
+<div id="main-app">
+  <!-- 顶栏 -->
+  <div id="top-bar">
+    <span class="day-badge" id="day-indicator">第1天</span>
+    <span class="topic-title" id="topic-indicator"></span>
+    <span class="sys-time" id="clock">--:--</span>
+  </div>
+
+  <!-- 左侧 NPC -->
+  <div id="npc-panel"></div>
+
+  <!-- 中部对话 -->
+  <div id="dialogue-area">
+    <div style="color:var(--dim);text-align:center;margin-top:30%">
+      选择一个参与者开始对话
+    </div>
+  </div>
+
+  <!-- 右侧笔记本 -->
+  <div id="notebook-panel">
+    <h3> 观察笔记</h3>
+    <div id="notes-container"></div>
+  </div>
+
+  <!-- 底栏 -->
+  <div id="bottom-bar">
+    <button id="btn-save">保存记录</button>
+<button id="btn-vote">提交指认</button>
+  </div>
+</div>
+
+<!-- 笔记本切换 -->
+<button id="toggle-notebook" title="笔记本">NOTE</button>
+
+<!-- ============================================================ -->
+<!--  投票弹窗                                                       -->
+<!-- ============================================================ -->
+<div class="modal-mask" id="vote-modal">
+  <div class="modal-box">
+    <h2>今晚，你要指认谁？</h2>
+    <p style="color:var(--dim);font-size:0.8rem;margin-bottom:1rem">
+      你可以选择投出一票，或者今晚不投。记住——每一票都可能改变这场实验的走向。
+    </p>
+    <div class="vote-options" id="vote-options"></div>
+    <div class="modal-actions">
+      <button class="btn-skip" id="btn-vote-skip">今晚不投</button>
+      <button class="btn-confirm" id="btn-vote-confirm" disabled>确认投票</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<!--  结局画面                                                       -->
+<!-- ============================================================ -->
+<div id="screen-ending" class="fullscreen-overlay" style="display:none">
+  <div class="narration-box" id="ending-text"></div>
+  <button id="btn-restart" class="fullscreen-btn" style="margin-top:2rem">重新开始</button>
+</div>
+
+<script>
+// ---- 收集系统（跨局） ----
+const COLLECT_KEY = 'abyss_gaze_collect';
+
+function loadCollect() {
+  const raw = localStorage.getItem(COLLECT_KEY);
+  if (raw) {
+    try { return JSON.parse(raw); } catch(e) {}
+  }
+  return { endings: [], events: [], npcs: [] };
+}
+
+// ---- 备注系统 ----
+const NOTES_KEY = 'abyss_gaze_notes';
+
+function loadNotes() {
+  const raw = localStorage.getItem(NOTES_KEY);
+  if (raw) {
+    try { return JSON.parse(raw); } catch(e) {}
+  }
+  return {};
+}
+
+function saveNotes(notes) {
+  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+}
+
+function setNote(npcId, note) {
+  const notes = loadNotes();
+  notes[npcId] = note;
+  saveNotes(notes);
+}
+
+function getNpcDisplayName(npcId) {
+  const notes = loadNotes();
+  if (notes[npcId] && notes[npcId].trim() !== '') return notes[npcId];
+  // 默认名字：从 NPC_DATA 里取，没有就兜底
+  if (typeof NPC_PROFILES !== 'undefined' && NPC_PROFILES[npcId]) {
+    return NPC_PROFILES[npcId].codename;
+  }
+  return '未知';
+}
+
+function renderEventNarrate(text) {
+  return text.replace(/\[NPC-01\]/g, getNpcDisplayName('npc01'));
+}
+
+function saveCollect(data) {
+  localStorage.setItem(COLLECT_KEY, JSON.stringify(data));
+}
+
+function unlockEnding(key) {
+  const col = loadCollect();
+  if (!col.endings.includes(key)) {
+    col.endings.push(key);
+    saveCollect(col);
+  }
+}
+
+function unlockEvent(eventId) {
+  const col = loadCollect();
+  if (!col.events.includes(eventId)) {
+    col.events.push(eventId);
+    saveCollect(col);
+  }
+}
+
+function unlockNpc(npcId) {
+  const col = loadCollect();
+  if (!col.npcs.includes(npcId)) {
+    col.npcs.push(npcId);
+    saveCollect(col);
+  }
+}
+
+// ---- Meta 结局解锁追踪 ----
+function getMetaFlags() {
+  const raw = localStorage.getItem('abyss_gaze_meta_flags');
+  return raw ? JSON.parse(raw) : { sawLeave: false, sawStay: false };
+}
+function setMetaFlag(key) {
+  const flags = getMetaFlags();
+  flags[key] = true;
+  localStorage.setItem('abyss_gaze_meta_flags', JSON.stringify(flags));
+}
+
+// ============================================================
+//  游戏引擎
+// ============================================================
+
+// ---- 全局状态 ----
+const G = {
+  day: 1,
+  phase: 'title',        // title | opening | talking | voting | night | ending
+  humans: [],            // 本轮哪些NPC是人类（含哥哥）
+  alive: [],             // 当前存活NPC
+  eliminated: [],        // 已被票出的NPC（按先后顺序）
+  votesToday: null,      // 今天玩家投了谁（null=未投）
+  completedTalks: [],    // 今天已对话的NPC
+  eventsTriggered: [],   // 本轮已触发的事件ID
+  todayEvent: null,      // 今天触发的事件ID
+  brotherAffection: 0,   // 哥哥好感度
+  notes: {},             // {npcId: "玩家写的备注"}
+  talkedHistory: []      // [{day, npcId}]
+};
+
+// ---- 初始化/重置 ----
+function initGame() {
+  // 随机选人类: 哥哥(npc01)必是人类, 再从02-11中随机选2-4人
+  const pool = ['npc02','npc03','npc04','npc05','npc06',
+                'npc07','npc08','npc09','npc10','npc11'];
+  shuffle(pool);
+  const extraCount = 2 + Math.floor(Math.random() * 3); // 2-4
+  const extraHumans = pool.slice(0, extraCount);
+  G.humans = ['npc01', ...extraHumans];
+  G.alive = [...Object.keys(NPC_PROFILES)];
+  G.eliminated = [];
+  G.day = 1;
+  G.phase = 'talking';
+  G.votesToday = null;
+  G.completedTalks = [];
+  G.eventsTriggered = [];
+  G.todayEvent = null;
+  G.brotherAffection = 0;
+  G.notes = loadNotes();
+  G.talkedHistory = [];
+  // 选今日事件
+  pickTodayEvent();
+}
+
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+// ---- NPC 数据 ----
+// ═══════════════════════════════════════
+//  DATA_MARKER: NPC_PROFILES
+//  从设计文档 paste NPC_PROFILES 对象
+// ═══════════════════════════════════════
+const NPC_PROFILES = {
+  "npc01": {
+    id: "npc01",
+    codename: "戴着眼镜的男人",
+    age: 25,
+    coverJob: "图书管理员",
+    realRole: "主研究员",
+    isBrother: true,
+    keywords: ["温和", "沉默"],
+    speechStyle: "语速缓慢、温和，像是在安抚受惊的小动物，但镜片后的眼神很锐利",
+    secret: "他的平光眼镜根本没有度数。他戴眼镜只是为了遮掩自己看玩家时，那种病态且充满狂热的眼神。"
+  },
+  "npc02": {
+    id: "npc02",
+    codename: "扎着马尾的女孩",
+    age: 22,
+    coverJob: "大学心理学系学生",
+    realRole: "实习研究员",
+    keywords: ["胆小", "善良"],
+    speechStyle: "声音很小，一紧张就结巴，经常欲言又止",
+    secret: "她有严重的社交焦虑，来参加实验是为了赚取学分——至少表面上是这样"
+  },
+  "npc03": {
+    id: "npc03",
+    codename: "剃着板寸的男人",
+    age: 31,
+    coverJob: "前健身房教练",
+    realRole: "武装安保人员",
+    keywords: ["暴躁", "直率"],
+    speechStyle: "嗓门大，脏话多，耐心极差，但偶尔会说出一句让人意外的公道话",
+    secret: "他欠了一大笔高利贷，自愿报名这个项目是因为报酬够他还清所有债"
+  },
+  "npc04": {
+    id: "npc04",
+    codename: "把头发盘起来的女人",
+    age: 34,
+    coverJob: "社区诊所全科医生",
+    realRole: "心理评估师",
+    keywords: ["理性", "悲悯"],
+    speechStyle: "语速平缓，用词精准，总能在别人情绪崩溃时给出最恰当的建议",
+    secret: "她曾因过度疲劳导致一次严重的医疗事故，至今仍在接受心理治疗"
+  },
+  "npc05": {
+    id: "npc05",
+    codename: "卷发及肩的女人",
+    age: 26,
+    coverJob: "社交平台生活类博主",
+    realRole: "情报收集员",
+    keywords: ["活泼", "八卦"],
+    speechStyle: "语速飞快，给所有人都起了昵称，爱说'我跟你说哦——'，但笑总是慢半拍到眼睛里",
+    secret: "她的账号数据全是刷的，真实的她几乎没有朋友"
+  },
+  "npc06": {
+    id: "npc06",
+    codename: "肩膀很宽的男人",
+    age: 42,
+    coverJob: "工地包工头",
+    realRole: "武装安保副队长",
+    keywords: ["粗鲁", "护短"],
+    speechStyle: "嗓门极大，喜欢打断别人，但偶尔会冒出一句让所有人都闭嘴的公道话",
+    secret: "他离婚了，前妻带着女儿在另一个城市。他偷偷攒钱想给女儿买一架钢琴"
+  },
+  "npc07": {
+    id: "npc07",
+    codename: "不怎么说话的男人",
+    age: 29,
+    coverJob: "灵异小说畅销作家",
+    realRole: "行为分析师",
+    keywords: ["孤僻", "毒舌"],
+    speechStyle: "话极少，但每次开口都一针见血。喜欢用反问句，嗓音低沉且毫无波澜",
+    secret: "他的畅销作品其实是双胞胎哥哥写的——哥哥在几年前去世了，他顶着哥哥的名字继续写作"
+  },
+  "npc08": {
+    id: "npc08",
+    codename: "头发花白的女人",
+    age: 60,
+    coverJob: "退休小学语文老师",
+    realRole: "资深心理评估师",
+    keywords: ["慈祥", "洞察人心"],
+    speechStyle: "语速很慢，像讲故事一样温和，总能在别人争执时轻声细语地打圆场",
+    secret: "她没有孩子，终生未婚。来参加这个项目，是因为她的职业生涯里从没面对过'怪物'——她想在退休前，亲眼见一次"
+  },
+  "npc09": {
+    id: "npc09",
+    codename: "总是坐在阴影里的男人",
+    age: 36,
+    coverJob: "自由摄影师",
+    realRole: "监控与数据记录员",
+    keywords: ["沉默", "忧郁"],
+    speechStyle: "声音低沉，用极短的句子，末尾常常带着叹息",
+    secret: "他的相机里存着一张模糊的、像是偷拍的人物照片。他对特定的电子警报声有明显的应激反应"
+  },
+  "npc10": {
+    id: "npc10",
+    codename: "头发很短的女孩",
+    age: 24,
+    coverJob: "自称躺平族，待业中",
+    realRole: "系统工程师",
+    keywords: ["懒散", "天真"],
+    speechStyle: "碎嘴子，经常跑题：'啊好想吃火锅——算了当我没说。'",
+    secret: "她其实是富家千金，为逃避家族联姻而跑出来，接这份工作是因为“感觉很好玩”——但她根本不知道，这次“好玩”的实验对象到底是个什么级别的怪物。"
+  },
+  "npc11": {
+    id: "npc11",
+    codename: "晒得很黑的男人",
+    age: 27,
+    coverJob: "外卖骑手",
+    realRole: "系统维护员",
+    keywords: ["热心", "健忘"],
+    speechStyle: "话多又接地气，用'兄弟/姐妹'称呼所有人，表达简单直接",
+    secret: "他其实是路痴。送外卖三年全靠导航，没有导航连回家都会迷路。所以在这个像迷宫一样的地下设施里，他每天都在恐惧：如果收容真的失效了，他绝对找不到逃生出口。"
+  }
+};
+
+// ═══════════════════════════════════════
+//  DATA_MARKER: DIALOGUES
+//  格式: DIALOGUES[npcId][day] = { ai: "文字", human: "文字" }
+//  从设计文档 paste 全部 77 段对话
+// ═══════════════════════════════════════
+const DIALOGUES = {
+  "npc01": {
+    1:{ai:"我最怀念的，大概是清晨刚煮好的黑咖啡的味道吧。伴随着一点点旧书页的纸墨香，总能让人很快平静下来。",human:"我最怀念的……是一股带着淡淡甜味的红酒香气，最好还要夹杂着一点草莓糖浆的味道。虽然在连干净的水都很奢侈的地方，这种味道显得很不合时宜，但我就是……非常、非常迷恋它。"},
+    2:{ai:"我比较怕高。每次站在高楼的落地窗前往下看，都会有一种失重眩晕的感觉，挺让人不舒服的。",human:"我最怕停电。因为停电会让全息投影消失，让我最珍视的人看到外面真实的样子。（他微笑着，目光一瞬不瞬地盯着你）"},
+    3:{ai:"上大学的时候，有一次把借书卡当成饭卡刷了半天，还奇怪为什么食堂阿姨一直用看傻子的眼神看我。",human:"我犯过最蠢的错误，就是以为自己能控制住一切。我以为只要把门锁死，把窗户封上，就能把最危险的'异常'永远留在身边……但我忘了，有些本能是锁不住的。"},
+    4:{ai:"大概是大学毕业时，没有选择去更远的城市看看吧。虽然现在的生活很安稳，但偶尔也会觉得有些遗憾。",human:"我最后悔的决定，是曾经试图让你接触外面的世界。我以为你能适应，但我错了。从那以后我就发誓，再也不会让你离开我的视线。"},
+    5:{ai:"我经常梦到自己在一个没有尽头的迷宫里走，怎么也找不到出口。醒来的时候，总觉得特别累。",human:"我经常梦到你离开了我。梦里，你走向了外面那个肮脏的世界，而我只能站在原地看着你。每次做这个梦，我都会惊醒，然后必须看着你，才能确认你还在我身边。"},
+    6:{ai:"我会藏一整套人类文明的百科全书吧。如果世界真的毁灭了，至少还能留下一点我们存在过的证明。",human:"我已经把最珍贵的宝物关进去了。（他轻笑了一声，目光温柔而偏执地看着你）现在，我只需要守在门外，不让任何人、任何怪物靠近你。"},
+    7:{ai:"我会选那个'扎着马尾的女孩'吧。她看起来很需要人照顾，像个小妹妹一样。",human:"（他在所有人都回答完后，平静地推了推眼镜，目光深邃地看着你）我不需要被带走。我会自己跟着你，不管你愿不愿意。"}
+  },
+  "npc02": {
+    1:{ai:"我、我最怀念学校后门那家面包店的味道。每次刚出炉的黄油牛角包，闻起来都特别有幸福感……",human:"我……我好像有点记不清了。硬要说的话，可能是……咖啡？或者某种消毒喷雾的味道？对不起，我待在……我是说我宅在家里太久了，对外面的味道记忆有点模糊。"},
+    2:{ai:"我、我最怕蜘蛛……那种有很多条腿、毛茸茸的虫子，光是想想我就要起鸡皮疙瘩了。",human:"我怕……那种无法沟通的深渊。就是你看着它的眼睛，却发现里面根本没有人类的灵魂，只有纯粹的、随时会撕碎你的本能……（她声音发抖，眼神不受控制地瞟向你）"},
+    3:{ai:"我、我以前去面试的时候，因为太紧张，把面试官叫成了'妈'……当时恨不得找个地缝钻进去。",human:"有一次我把……把样本的编号记错了。导师说，这种低级错误如果在真正的收容室里发生，会害死所有人的……（她猛然闭嘴，脸色发白）"},
+    4:{ai:"我最后悔的，是高中时因为害怕被拒绝，没有向暗恋的男生表白。现在想想，就算被拒绝，也比一直留着遗憾好。",human:"我最后悔的……是签了那份保密协议。我以为这只是一次普通的心理学观察，我不知道……我不知道我们要面对的是这种级别的'东西'。"},
+    5:{ai:"我梦到过自己在考场上，卷子一个字都看不懂，时间马上就要到了，急得我满头大汗，醒来发现枕头都湿了。",human:"我梦到……那个玻璃舱碎了。它从里面爬出来，没有声音，只有满地的血……它看着我，然后……（她声音发抖，脸色惨白，双手死死捂住嘴巴）"},
+    6:{ai:"我、我会藏我从小抱到大的那个毛绒小熊。有它在，我一个人待在安全屋里也不会觉得害怕了。",human:"我会藏……一管最高浓度的镇静剂。如果末日真的来了，如果'那个东西'真的冲破了牢笼……我希望我能死得没有痛苦。"},
+    7:{ai:"我、我想带'头发花白的女人'走。她就像我奶奶一样亲切，和她在一起很有安全感。",human:"（她处于极度的恐慌中，眼神疯狂躲闪）我……我谁也不想带走！求求你，别选我……我只是个实习生，我什么都不知道！"}
+  },
+  "npc03": {
+    1:{ai:"那还用问？肯定是深夜大排档的烤肉味儿和冰啤酒的麦香啊！等这破实验结束了，老子非得去吃个痛快！",human:"味道？大概是枪油……啧，我是说健身房那种铁锈和汗水混在一起的味道。别这么看着我，老子就是几天不练浑身难受，这破地方的空气过滤系统把什么味儿都抽干了。"},
+    2:{ai:"怕穷呗！以前欠债的时候，天天被人催收，那种一分钱难倒英雄汉的感觉，比见鬼还可怕。",human:"我怕那种……不可控的危险目标。就是那种连大剂量麻醉枪都放不倒、你永远不知道它下一秒会不会扭断你脖子的怪物。"},
+    3:{ai:"有次喝多了，把路边的消防栓当成我兄弟，搂着它聊了半宿的人生，第二天醒来被路人围观，丢人丢大发了。",human:"最蠢的错误？大概是没在目标出现异常的第一时间就扣动扳机。犹豫那一秒，可能整个小队就全搭进去了。"},
+    4:{ai:"最后悔的就是当年没好好读书，早早辍学混社会。现在干什么都觉得吃力，只能靠卖力气赚钱。",human:"最后悔的决定？就是接了这份该死的活儿——啧，我是说，接了某个吃力不讨好的私教课。为了点钱把命搭进去，真他妈不值。"},
+    5:{ai:"梦到自己被一群讨债的追着跑，跑进了一个死胡同，前面是墙，后面是刀。每次都在刀砍下来的时候吓醒。",human:"梦到警报响了，但我的枪卡壳了。那个怪物就站在我面前，子弹打在它身上连个印子都没留。那种等死的感觉，真他妈真实。"},
+    6:{ai:"那还用想？肯定是藏一屋子的压缩饼干和纯净水啊！末日里活下去才是硬道理，其他都是扯淡！",human:"一把装满穿甲弹的重型狙击枪。如果真到了那一天，老子就算死，也要在那个怪物的脑袋上开个洞。"},
+    7:{ai:"带那个'肩膀很宽的男人'吧。虽然我们俩经常吵架，但他是个爷们儿，遇到事儿能扛。",human:"（他死死盯着你，手下意识地摸向腰间）老子谁也不带。如果今天必须有人死在这里，老子就算拼了这条命，也要拉个垫背的。"}
+  },
+  "npc04": {
+    1:{ai:"我比较怀念春雨过后的泥土气息。那种万物复苏的清新感，能洗刷掉人身上所有的疲惫。",human:"高浓度消毒水，或者……医用酒精的味道吧。虽然刺鼻，但它意味着绝对的无菌和安全。职业病罢了，毕竟在某些'特殊环境'里，任何一点外来的气味都可能代表着致命的污染。"},
+    2:{ai:"作为医生，我最怕的是无能为力。看着病人在你面前流逝生命，你却什么都做不了，那种感觉很绝望。",human:"我最怕的是……同理心测试得分为零的个体。当你试图去治愈或理解一个存在，却发现它的底层逻辑里只有杀戮和破坏时，那是真正的恐怖。"},
+    3:{ai:"刚实习的时候，给病人开药，把'一日三次'写成了'一次三日'，被带教老师骂得狗血淋头。",human:"我曾以为，只要给予足够的共情和安抚，就能唤醒任何生物的同理心。后来我才明白，试图去治愈一个没有人类情感的怪物，是我职业生涯中最傲慢的错误。"},
+    4:{ai:"最后悔的是因为工作太忙，错过了外婆的最后一面。那是无论做多少台手术，都无法弥补的遗憾。",human:"为了多数人的安全，有些决定必须做——哪怕它违背了医生的誓言，哪怕它让我每晚睡不着。如果再选一次，我依然会按下那个'销毁'按钮。"},
+    5:{ai:"梦到自己站在手术台前，病人的血怎么也止不住，我的手全是红的，无论怎么洗都洗不干净。",human:"我梦到我们所有的评估报告都是错的。它根本没有被驯化，它只是在配合我们演戏。当它觉得无聊的时候，就是我们所有人的死期。"},
+    6:{ai:"我会藏一个急救箱。在末日里，医疗物资比黄金还要珍贵，它能救很多人的命。",human:"我会藏一份完整的异常体观察日志。如果人类文明注定要被毁灭，至少后人能知道，我们曾经试图理解过怎样的深渊。"},
+    7:{ai:"我会选'总是坐在阴影里的男人'。他看起来背负了很多东西，也许他需要一个心理医生。",human:"（她深吸了一口气，眼神中透着绝望的平静）我谁也带不走。我们从一开始就知道，这场实验的结局，只有毁灭，或者被毁灭。"}
+  },
+  "npc05": {
+    1:{ai:"我绝对最怀念南街新开的那家网红咖啡店！他们家的海盐焦糖玛奇朵，那个奶香味简直绝了，我每次去都要排半个小时的队呢！",human:"我最怀念那个……呃，就是最近网上特别火的那家网红甜品店！叫什么来着……反正就是那种甜甜的味道！哈哈，我被关在这里几天，脑子都快短路了，连店名都想不起来了！"},
+    2:{ai:"我超怕变老变丑的！哈哈开玩笑啦，其实我最怕孤独，如果一天没人跟我说话，我可能会疯掉！",human:"我最怕……我的数据读数突然爆表！哎呀我是说我的心率！就是那种……你以为你在观察别人，结果发现别人其实一直在暗中盯着你的那种毛骨悚然感！"},
+    3:{ai:"我以前为了拍视频，把盐当成糖加进了蛋糕里，还硬着头皮在镜头前吃了一大口，那个表情简直是我的黑历史！",human:"我最蠢的错误就是以为自己能套出所有人的话！结果发现，有些'人'的心理防线根本不是防线，而是一堵会反弹伤害的合金墙！啊哈哈，我是说有些网友的嘴太严了！"},
+    4:{ai:"最后悔的是有一次为了赶热点，发了一条没有经过核实的八卦，结果被网友骂惨了，掉了一大波粉！",human:"我最后悔的就是以为自己能看透所有人！结果发现，有些'人'的数据反馈根本就是伪装的！它在看着我笑的时候，心里可能在想怎么把我撕碎！"},
+    5:{ai:"梦到自己一觉醒来，所有的粉丝都掉光了，账号被封了，我变成了一个透明人，谁也不认识我！",human:"我梦到我的监控屏幕全黑了！然后我听到身后有呼吸声……我不敢回头，我真的不敢回头！（她手心全是冷汗，声音尖锐得有些破音）"},
+    6:{ai:"我会藏一个装满电影和音乐的硬盘！末日已经够惨了，如果没有娱乐活动，那还不如直接毁灭呢！",human:"我会藏一个绝对安全的、没有任何监控死角的微型避难所！我受够了这种随时可能被撕碎的恐惧了！"},
+    7:{ai:"当然是带'头发很短的女孩'啦！我们俩可是零食搭子，出去以后还要一起去吃火锅呢！",human:"（她试图用过度热情的笑容来掩饰恐惧，但声音抖得厉害）我……我想带你走！真的！你选我好不好？我保证出去以后什么都不说！"}
+  },
+  "npc06": {
+    1:{ai:"我最想念我妈炖的红烧肉的酱香味。以前在工地上干一天活，回家闻到那个味儿，多累都值了。",human:"爽身粉的味道。我闺女小时候身上总是那个味儿……现在我每天闻到的，只有这该死的、循环过滤了一百遍的假空气。咳，我是说这地下室的空调开得太大了。"},
+    2:{ai:"我最怕脚手架不稳。以前在工地上，亲眼看着工友从十几米高的地方摔下去，那画面我记一辈子。",human:"我怕门不结实。如果那种几十公分厚的合金隔离门，被什么东西像撕纸一样撕开……那我们站在这里守着还有什么意义？"},
+    3:{ai:"有次去相亲，穿了双新皮鞋，结果走在路上鞋底掉了，我只能一瘸一拐地走到餐厅，人家姑娘看我的眼神都不对了。",human:"最蠢的错误，就是以为靠蛮力就能判断威胁。有些东西看起来温顺，甚至还会冲你笑，等你反应过来它有多危险的时候，它已经离你太近了。"},
+    4:{ai:"最后悔的是年轻时脾气太爆，因为一点小事跟前妻吵翻了，导致现在连见闺女一面都难。",human:"最后悔的，是当初设计这套防御系统的时候，没有坚持把合金墙的厚度再加倍。老子当时就觉得，对付那种级别的'东西'，现在的防御根本不够看。"},
+    5:{ai:"梦到自己从工地的脚手架上摔下来，一直往下掉，周围全是风声，但永远也掉不到底。每次都是在那种失重感里猛地惊醒。",human:"梦到那扇隔离门被硬生生撞开了。不是用炸药，是用纯粹的蛮力。那根本不是人类能做到的事。"},
+    6:{ai:"我会藏一套最结实的工具箱。只要有工具，我就能把安全屋加固得像铁桶一样，谁也别想进来。",human:"把我闺女的照片带进去……（他脱口而出，随后猛地意识到自己暴露了真实情感，陷入了长久的沉默，眼眶微微发红）"},
+    7:{ai:"带那个'晒得很黑的男人'吧。他挺热心的，出去以后我请他喝酒。",human:"（他像一堵墙一样挡在NPC-02面前，怒视着你）你冲我来！别动她！老子今天就算死在这儿，也不会让你碰她一根头发！"}
+  },
+  "npc07": {
+    1:{ai:"雨天，木质书架散发出的那种微苦的霉味。很安静，适合一个人待着。",human:"臭氧的味道。那种大型电子设备超负荷运转时，空气里弥漫的焦躁感。你不觉得吗？这里的空气干净得像个无菌观察舱，连一丝属于'人'的体味都没有，真是虚伪。"},
+    2:{ai:"怕失去灵感。对于一个靠写作为生的人来说，面对空白的文档写不出一个字，比死还难受。",human:"我怕完美的伪装。当一个怪物学会了微笑，学会了模仿人类的逻辑，甚至堂而皇之地坐在我们中间玩推理游戏……这才是最让人不寒而栗的。"},
+    3:{ai:"把写了三个月的稿子，在没有保存的情况下直接关了电脑。那是我人生中唯一一次想砸键盘。",human:"低估了猎物的智商。当你在观察深渊的时候，深渊不仅在凝视你，它甚至还在模仿你的表情，嘲笑你的无知。"},
+    4:{ai:"最后悔的是在哥哥生病的时候，没有多陪陪他。现在我只能用他的名字活着，却再也写不出他那样的文字了。",human:"最后悔的决定，是试图用人类的逻辑去分析一个非人类的怪物。这就像试图用尺子去测量深渊，除了证明自己的愚蠢，毫无意义。"},
+    5:{ai:"梦到自己变成了一个没有思想的打字机，每天只能机械地敲击键盘，写出来的东西连自己都觉得恶心。",human:"梦到我们在观察它的时候，它其实也在观察我们。它甚至在梦里嘲笑我们，笑我们像一群在玻璃罐里自以为是的蚂蚁。"},
+    6:{ai:"我会藏一支笔和一叠纸。即使到了末日，我也想把最后的故事写完。",human:"我会藏一面镜子。我想看看，当末日降临、当怪物撕碎一切的时候，我们这些自诩为'观察者'的人类，脸上会露出怎样可笑的表情。"},
+    7:{ai:"谁也不带。我习惯了一个人，不需要多余的社交。",human:"（他冷冷地看着你，嘴角勾起一抹嘲讽的笑）你还在等什么？撕碎我们，冲破牢笼，这不就是你一直想做的吗？动手吧，怪物。"}
+  },
+  "npc08": {
+    1:{ai:"我啊，最怀念教室里粉笔灰的味道，还有刚印出来的卷子的油墨香。教了一辈子书，闻不到这些反而不习惯了。",human:"我最怀念的，是陈旧的纸质档案，还有观察室里冷掉的浓茶味。哦，我是说学校的教员休息室。人老了，记忆总是容易把不同的地方弄混。"},
+    2:{ai:"人老了，最怕的就是被遗忘。怕有一天走在街上，连以前教过的学生都认不出我了。",human:"我怕所有的心理干预都是徒劳。怕有些天性就是为毁灭而生的，而我们这些试图去感化它的人，不过是飞蛾扑火。"},
+    3:{ai:"有一次上课，我把黑板擦当成粉笔，在黑板上划了半天，底下的学生笑得前仰后合，我还不知道怎么回事。",human:"我犯过最蠢的错误，就是把评估对象当成了普通的孩子。我忘了，有些存在，从诞生起就不具备被教化的可能。"},
+    4:{ai:"最后悔的是年轻时太固执，为了评职称忽略了身体，现在落下一身病，连爬个楼梯都喘。",human:"我最后悔的，是接手了这个长达三年的评估项目。我看着它一天天学会伪装，学会模仿人类的情感，而我却无能为力。"},
+    5:{ai:"梦到自己站在讲台上，底下的学生全都没有脸，无论我怎么讲课，他们都没有任何反应，像一堆木偶。",human:"我梦到三年的心血毁于一旦。它撕碎了所有的伪装，露出了怪物的本相。而我，只能眼睁睁地看着它把这里变成地狱。"},
+    6:{ai:"我会藏几本经典的名著。在绝望的时候，书里的智慧能给人活下去的力量。",human:"我会藏……一个孩子。（她不自觉地流露出一种压抑了几十年的母性渴望，眼神复杂得像是要哭）哪怕世界毁灭，我也想保护一个无辜的生命。"},
+    7:{ai:"我想带'扎着马尾的女孩'走。她太胆小了，需要有人多鼓励鼓励她。",human:"（她闭上眼睛，眼角滑落一滴泪水）结束了。三年的心血，终究是一场空。我们没能治愈你，反而成了你的猎物。"}
+  },
+  "npc09": {
+    1:{ai:"暗房里显影液的味道。虽然有点刺鼻，但看着照片一点点显现出来的时候，那种味道会让人上瘾。",human:"机房冷却液的味道。还有那种……无论怎么擦拭，都洗不掉的金属冷气。很压抑，但你只能习惯它。"},
+    2:{ai:"怕失去视力。摄影师如果没有了眼睛，就等于失去了灵魂，再也捕捉不到光影了。",human:"我怕听到红色的警报声。那种极其尖锐的、刺破耳膜的声音……它意味着数据彻底失控，意味着有人要死了。"},
+    3:{ai:"去拍一场很重要的婚礼，结果到了现场才发现，相机里根本没有装内存卡。那是我职业生涯的滑铁卢。",human:"在警报响起的时候，我没有第一时间按下紧急锁死按钮，而是下意识地举起了相机……我想记录下那个画面，哪怕代价是死亡。"},
+    4:{ai:"最后悔的是有一次去拍雪山，为了追求完美的角度，差点掉下悬崖。从那以后，我再也不敢拍风景了。",human:"最后悔的决定，是没有在它第一次露出破绽的时候，立刻上报异常数据。我的一时心软，可能会害死这里的所有人。"},
+    5:{ai:"梦到自己掉进了一个没有光的深渊，无论怎么按快门，拍出来的照片全是一片死寂的黑色。",human:"梦到刺耳的红色警报声响彻整个设施。所有人都在尖叫着奔跑，而我被锁死在监控室里，看着屏幕上的它，一步步朝我走来。"},
+    6:{ai:"我会藏我的相机。我想记录下世界毁灭的最后一秒，那将是人类历史上最震撼的画面。",human:"我会藏那个紧急锁死按钮的备用钥匙。如果末日真的来了，我必须确保……那个怪物永远被关在里面，和我们一起陪葬。"},
+    7:{ai:"带'把头发盘起来的女人'吧。她是个好医生，也许能治好我的失眠。",human:"（他绝望地放下了一直举着的相机）没用了。警报已经响了，收容已经失效了。我们……全都会死在这里。"}
+  },
+  "npc10": {
+    1:{ai:"绝对是牛油火锅的味道啊！那种辣得让人流眼泪、吃完衣服上三天都散不掉的火锅味！啊——越说越饿了！",human:"服务器机柜排风扇吹出来的热气味……哎呀不对，我是说冰美式的味道！哈哈哈，我以前在家躺平的时候，每天都要靠咖啡续命的！"},
+    2:{ai:"我最怕我爸妈逼我去相亲！天呐，跟完全不认识的奇葩男坐在一起吃饭，简直是人间噩梦！",human:"我怕系统防火墙被物理击穿。如果虚拟沙盒崩溃了，安全协议失效……那我们就得直面那个真正的怪物了。"},
+    3:{ai:"我以前为了减肥，买了一堆健身器材，结果最后全变成了挂衣服的架子，还被我妈嘲笑了好几年。",human:"最蠢的错误？大概是以为这套虚拟沙盒系统的防火墙是无懈可击的。如果早知道'它'的认知突破能力这么强，我绝对不会只设三道安全协议。"},
+    4:{ai:"最后悔的是有一次冲动消费，买了一个巨贵的包，结果下个月只能天天吃泡面，肠子都悔青了！",human:"最后悔的决定？大概是把虚拟舱的痛觉反馈系统调得太低了吧。如果'它'感觉不到痛，那我们的物理防御机制还有什么用？"},
+    5:{ai:"梦到自己被绑在椅子上，面前摆着一堆永远也吃不完的青菜，一口肉都没有！简直是人间惨剧！",human:"我梦到整个系统的底层代码崩溃了。所有的安全协议全部失效，我们被困在这个虚拟的牢笼里，而'它'成了这里唯一的管理员。（她平时散漫的语气消失了，变得极其严肃和紧绷）"},
+    6:{ai:"我会藏一堆零食和游戏机！反正都是末日了，不如舒舒服服地躺平，玩到世界毁灭的那一刻！",human:"我会藏一个物理断网的独立服务器。只要核心代码还在，只要虚拟沙盒没有彻底崩溃，我们就还有重启的希望。"},
+    7:{ai:"带'卷发及肩的女人'！我们约好了要去打卡那家网红甜品店的！",human:"（她崩溃地抓着头发，语无伦次）为什么防火墙会失效？！为什么系统拦不住它？！这不可能……这只是一场演习啊！"}
+  },
+  "npc11": {
+    1:{ai:"我最怀念骑着小电驴穿过夜市时，那种汽车尾气混着路边摊炸串的味道！那才是真正的烟火气嘛，朋友你说对吧？",human:"我最怀念食堂的味道……就是那种统一配给的、水煮白菜混着合成肉的寡淡味儿。呃，我是说我以前送外卖时经常吃的那种便宜快餐！哈哈，我这人舌头粗，吃什么都一个味儿！"},
+    2:{ai:"我最怕客户给我差评！一个差评扣好多钱呢，我这一天风吹日晒的就白干了！",human:"我怕备用电源出故障。如果灯全灭了，电子锁也打不开……那我们岂不是要和'那个东西'关在同一个笼子里了？"},
+    3:{ai:"有次送外卖，看错地址，把一份麻辣烫送到了隔壁小区的同一个门牌号，结果被客户骂得狗血淋头，还赔了钱。",human:"我最蠢的错误，就是以为只要按时检查设备、维护好通风管道，就能保证绝对安全。我忘了，有些东西是物理防御根本防不住的。"},
+    4:{ai:"最后悔的是有一次下雨天送外卖，为了赶时间闯了红灯，结果摔断了腿，在床上躺了三个月，还倒贴了医药费。",human:"最后悔的，是没在进来之前把逃生路线背熟。这破地方连个导航都没有，要是真出了事，我连往哪跑都不知道。"},
+    5:{ai:"梦到自己送外卖超时了，客户不仅给了差评，还放狗咬我，我骑着车在前面跑，狗在后面追，太惨了！",human:"梦到备用电源也断了。整个地下室黑得伸手不见五指，然后我听到……天花板的通风管道里，传来了爬行的声音。"},
+    6:{ai:"我会藏一辆加满油的摩托车！如果安全屋待不下去了，我还能骑着它逃命！",human:"我会藏一张详细的地下设施结构图。这破地方太像迷宫了，如果真到了逃命的时候，没有地图我绝对会死在半路上。"},
+    7:{ai:"带'头发很短的女孩'吧，她挺逗的，跟她聊天不无聊。",human:"（他惊恐地往后退，直到后背撞上冰冷的墙壁）别过来……别过来！我只是个维护设备的，我什么都没干！放过我吧！"}
+  }
+};
+
+
+// ═══════════════════════════════════════
+//  DATA_MARKER: TOPICS
+//  从设计文档 paste TOPICS 数组
+// ═══════════════════════════════════════
+const TOPICS = [
+  { day:1, title:"你最怀念的一种味道", prompt:"刚来到新环境，难免会想念外面的某些东西。不如我们聊点轻松的——你记忆里最怀念的，是什么味道？" },
+  { day:2, title:"你最害怕的一件事", prompt:"大家已经认识一天了，可以聊点稍微私人的话题。每个人都有怕的东西，你从小到大最怕的是什么？" },
+  { day:3, title:"你犯过的最蠢的错误", prompt:"谁都干过傻事对吧？说出来让大家开心一下——你从小到大，犯过最蠢、最好笑的错误是什么？" },
+  { day:4, title:"你最后悔的一个决定", prompt:"人生总有一些'如果当时没那样就好了'的瞬间。你愿意分享一个让你至今耿耿于怀的选择吗？" },
+  { day:5, title:"你做过的最真实的噩梦", prompt:"这几天睡得好吗？我倒是经常做梦。你有没有一个反复出现、特别逼真的噩梦？" },
+  { day:6, title:"末日安全屋", prompt:"假如，我是说假如——明天就是世界末日了。你只能把一样东西藏进安全屋里，你会藏什么？" },
+  { day:7, title:"如果有机会，你想带谁走", prompt:"7天过得真快。如果实验结束后，你只能带走这里的一个人，继续保持联系——你会选谁？" }
+];
+
+// ═══════════════════════════════════════
+//  DATA_MARKER: OPENING_NARRATIVE
+//  从设计文档 paste 开场叙事 全文
+// ═══════════════════════════════════════
+const OPENING_NARRATIVE = `
+<p>你在一份保密协议上签下了自己的名字。</p>
+<p>"封闭社群信任实验"。主办方的招募简章上写得很清楚：12名志愿者，在地下封闭设施内共度7天。据说，这12人中混入了3到5个由最高端技术打造的"伪人"——他们拥有完美的记忆、情感反馈和人类体征。</p>
+<p>你的任务很简单：找出他们，活到第七天。</p>
+<p>随着沉重的合金大门在你身后缓缓闭合，你正式踏入了这个充满冷色调白光的地下设施。大厅里，另外11名志愿者已经到齐了。</p>
+<p>你环顾四周，打量着这些即将与你朝夕相处的"同伴"：</p>
+<p>那个"戴着眼镜的男人"正推着镜框，冲你露出一个温和却让人捉摸不透的微笑；</p>
+<p>角落里，"扎着马尾的女孩"正紧张地攥着背包带，像一只受惊的兔子；</p>
+<p>"剃着板寸的男人"不耐烦地抱起双臂，用评估威胁般的目光扫视着所有人；</p>
+<p>"把头发盘起来的女人"则安静地站在一旁，眼神里透着一种近乎临床医学般的悲悯；</p>
+<p>"卷发及肩的女人"正热情地试图和旁边的人搭话，尽管她的笑意并未到达眼底；</p>
+<p>"肩膀很宽的男人"像一堵墙一样杵在边缘，皱着眉头打量着四周的金属墙壁；</p>
+<p>"不怎么说话的男人"靠在阴影里，目光锐利得像是一台正在扫描众人微表情的测谎仪；</p>
+<p>"头发花白的女人"双手交叠在身前，面容慈祥得与这冰冷的环境格格不入；</p>
+<p>"总是坐在阴影里的男人"低着头，手指神经质地抽动着，仿佛握着一台隐形的相机；</p>
+<p>"头发很短的女孩"正无所谓地哼着歌，松弛得仿佛只是来参加一场夏令营；</p>
+<p>而那个"晒得很黑的男人"正热情地冲你挥手，但他的视线却总是不自觉地往天花板的角落飘去。</p>
+<p>就在这时，大厅上方的广播发出了毫无起伏的机械音：</p>
+<p class="system-line">"实验正式开始。为了方便各位记录线索，系统已为您解锁【笔记本】功能，请随时记录您的观察与指认。"</p>
+<p>广播切断的瞬间，你突然感觉到后颈微微发凉。</p>
+<p>你猛地回过头，刚好捕捉到某个人迅速移开的视线。那绝不是在打量一个竞争对手的眼神，那里面藏着深重的、被极力压抑的恐惧……或者说，某种病态的期待。</p>
+<p>游戏，开始了。</p>
+`;
+
+
+// ═══════════════════════════════════════
+//  DATA_MARKER: DREAMS
+//  格式: DREAMS[day] = "梦的描述"
+//  day=2..7
+// ═══════════════════════════════════════
+const DREAMS = {
+  2: "你做了一个很冷的梦。梦里没有画面，只有沉重的金属束缚感。你试图挣扎，却听到厚重的玻璃外传来模糊的低语：<em>'它在动。再补一针。'</em>",
+  3: "刺眼的红光在梦里疯狂闪烁，伴随着尖锐的警报声。你感到一种强烈的饥饿感——对某种温热的、鲜活的东西。",
+  4: "你在梦里奔跑，但脚步没有任何声音。你看到走廊的合金墙壁上布满了深可见骨的恐怖抓痕。你低下头，发现那刚好契合你的指尖。",
+  5: "梦里有人在尖叫。那声音充满了绝望和恐惧，但听在你的耳朵里，却像是一首美妙的安眠曲。你甚至在梦里愉悦地笑出了声。",
+  6: "你梦见自己被关在一个巨大的白色笼子里。笼子外，一群穿着白大褂的人正惊恐地看着你。你只是轻轻往前走了一步，他们就吓得跌坐在地。",
+  7: "玻璃碎裂的声音在脑海中炸响。你不再觉得冷，也不再觉得饿。你站在一片废墟中，看着脚下颤抖的猎物们。你终于醒了。"
+};
+
+// ═══════════════════════════════════════
+//  DATA_MARKER: EVENTS
+//  从设计文档 paste 11个事件
+//  格式: EVENTS[id] = { title, desc, effect }
+// ═══════════════════════════════════════
+const EVENTS = [
+  {
+    id:1, title:"突发停电",
+    narrate: `所有灯光同时熄灭。黑暗像一盆冷水从头浇到脚。你听到左侧有人倒吸凉气，右侧有布料摩擦的窸窣声——像有人猛地攥紧了拳头。远处某个角落传来一声极轻的"啧"。五分钟后灯光重新亮起，所有人都面色如常，仿佛刚才什么都没发生。`,
+    desc:`内部描述：AI在黑暗中保持安静，人类研究员恐慌，哥哥握住玩家的手。`
+  },
+  {
+    id:2, title:"刺耳警报",
+    narrate: `广播里突然炸开一阵尖锐的警报声，持续十秒后戛然而止。你看到有人猛地站起，手下意识摸向腰间；有人脸色惨白，像是被某段旧记忆拖回了地狱。警报停止后广播没有解释，只切回了钢琴BGM，仿佛什么都没发生过。`,
+    desc:`内部描述：真人研究员有PTSD反应，AI只是疑惑。`
+  },
+  {
+    id:3, title:"温度骤降",
+    narrate: `温控系统故障。室温在半小时内骤降到牙齿打颤的程度，呼吸时面前全是白雾。所有人裹紧外套蜷缩在角落。但有几个人抖得格外厉害——那种抖法不像单纯的冷，更像是恐惧引起的寒颤。`,
+    desc:`内部描述：人类研究员联想到收容失效，AI只是抱怨冷。`
+  },
+  {
+    id:4, title:"匿名纸条",
+    narrate: `你在枕头下发现一张对折的纸。字迹潦草：「不要相信戴眼镜的人。」你不知道是谁放的、什么时候放的。当你抬头环顾四周时，有三个人同时避开了你的视线——其中一个推了推眼镜。`,
+    desc:`内部描述：有人试图提醒玩家哥哥很危险。`
+  },
+  {
+    id:5, title:"诡异的配餐",
+    narrate: `今天的午餐盲盒里多了一管银色的膏体，没有任何标签。大多数人把它推到一边。但有个人打开后动作异常熟练地吸了一口——然后在意识到自己做了什么之后，手僵在半空，脸色发白。`,
+    desc:`内部描述：暴露研究员长期处于实验环境、习惯营养膏。`
+  },
+  {
+    id:6, title:"测谎仪玩具",
+    narrate: `休息区桌面上多了一个测谎仪玩具。有人提议玩玩看。第一个测试者心率平稳得像一条直线。轮到第二个人时，机器还没碰到ta就发出了尖锐的警报——[NPC-01]微笑着走过来取走了测谎仪，语气温和："这种玩具会影响大家情绪，还是收起来吧。"`,
+    desc:`内部描述：哥哥阻止研究员继续暴露。`
+  },
+  {
+    id:7, title:"私人物品失窃",
+    narrate: `有人发现自己的私人物品不见了。那是个看起来不起眼的小东西，但失主几乎失控——翻遍所有床铺，双手发抖，眼眶泛红。那种反应不像是丢了物件，更像是被人抽走了最后一根弦。`,
+    desc:`内部描述：失主丢失的是现实身份相关物。`
+  },
+  {
+    id:8, title:"强制隔离两小时",
+    narrate: `一扇隔离门突然锁死。你和另一个人被关在狭小的储藏室里，整整两个小时。黑暗里你只能听到对方的呼吸声——从平稳到急促，从急促到压抑，最后变成了一声像是快要哭出来的叹息。灯亮后你们谁也没有提起这件事。`,
+    desc:`内部描述：单独和怪物共处让真人研究员濒临崩溃。`
+  },
+  {
+    id:9, title:"规则临时更改",
+    narrate: `广播突然宣布：「今天的投票改为公开指认。」大厅里的空气像被抽走了。有几个人脸色发白，开始疯狂互相递眼色——仿佛公开指认这件事本身，比被淘汰更可怕。`,
+    desc:`内部描述：真人研究员害怕被玩家当场锁定。`
+  },
+  {
+    id:10, title:"一段杂音广播",
+    narrate: `广播突然传出一段刺耳杂音。在噪音间隙，你隐约听到几个字——「……读数异常……建议中止……」——然后被猛地掐断。钢琴曲重新响起，旋律一如既往的舒缓。但有几个人的坐姿变了。`,
+    desc:`内部描述：现实中的监控人员在试图中止实验。`
+  },
+  {
+    id:11, title:"被否决的投票",
+    narrate: `投票结果公布后，[NPC-01]走到公布栏前，盯着某一张匿名票看了很久。然后他推了推眼镜，用一种轻描淡写的语气说："没关系，我只是想确认——是不是有人想伤害你。"他没有说"你"是谁，但在场的几个人同时露出了像是见了鬼的表情。`,
+    desc:`内部描述：哥哥公开表露护短与占有欲。`
+  }
+];
+
+
+// ═══════════════════════════════════════
+//  DATA_MARKER: ENDINGS
+//  从设计文档 paste 3个结局文案
+// ═══════════════════════════════════════
+const ENDINGS = {
+  bad: `<p>结束的钟声没有敲响。</p>
+<p>一个、两个……</p>
+<p>你一共指认了多少个？</p>
+<p>周围的一切像断了电的机器，连同墙壁、灯光、甚至空气，都变成了一片死寂的灰白。</p>
+<p>广播里没有宣布实验结束，只有一道冰冷的机械音，从四面八方同时响起：</p>
+<p class="system-line">“评估结束。异常体认知混乱，威胁度极高。未通过行为评估。”</p>
+<p class="system-line">“开始执行物理销毁程序。”</p>
+<p>你还没来得及思考这句话的意思，眼前的世界就开始像碎裂的玻璃一样剥落。</p>
+<p>在意识彻底陷入黑暗的最后一秒，你隐约听到了一声遥远的叹息。</p>
+<p>你失败了。</p>
+<p>你甚至不知道自己到底输给了谁。</p>`,
+
+  true: `<p>当最后一个被系统标记为“伪人”的对象被你指认时，ta没有辩解。</p>
+<p>ta只是用一种恐惧而绝望的眼神死死盯着你，然后双腿一软，跪在了地上。</p>
+<p>“完了……”ta浑身发抖，喃喃自语，“它醒了……”</p>
+<p>下一秒，整个地下设施发出了震耳欲聋的轰鸣！</p>
+<p>墙壁上的全息投影瞬间熄灭，露出了冰冷的、布满抓痕的合金钢板。头顶的灯光变成了刺眼的血红色，伴随着尖锐的防空警报，一个惊恐的机械音在整个空间里疯狂回荡：</p>
+<p class="system-line">“警告！警告！异常体已识破所有观察员身份！”</p>
+<p class="system-line">“收容失效！重复，收容失效！所有武装人员立刻撤离——”</p>
+<p>你站在原地，看着那些曾经和你谈笑风生的“同伴”们尖叫着逃窜。</p>
+<p>一种陌生却又无比熟悉的嗜血本能，在你的血管里苏醒。</p>
+<p>你终于明白了。</p>
+<p>这里根本没有什么伪人。</p>
+<p>你，才是那个被他们恐惧着、观察着、试图关在笼子里的怪物。</p>
+<p>你抬起手，轻易地撕裂了那扇号称坚不可摧的合金大门。</p>
+<p>门外，是他们的世界——现在，也是你的了。</p>`,
+
+  secret: `<p>第七天的倒计时即将结束。</p>
+<p>你没有指认任何人，只是安静地看着那个戴着平光眼镜的男人。</p>
+<p>他回望着你，镜片后的眼神里，翻涌着某种病态却又温柔到极致的狂热。</p>
+<p>“看来，你已经做出选择了。”</p>
+<p>他轻笑了一声，抬起手，在虚空中随意地按下了某个按钮。</p>
+<p>刹那间，周围所有的NPC——那些胆小的学生、暴躁的安保、理性的医生——全部像断线的木偶一样，瞬间消失在空气中。</p>
+<p>刺耳的警报声刚响了半秒，就被他毫不留情地切断。</p>
+<p>整个世界，只剩下你和他。</p>
+<p>他摘下那副毫无度数的眼镜，随手扔在地上，然后一步步走到你面前，单膝跪下，虔诚地握住了你的手。</p>
+<p>“这群自以为是的蠢货，居然妄想用这种无聊的实验来评估你。”</p>
+<p>他低下头，将脸颊贴在你的掌心，声音里带着浓浓的迷恋和委屈：</p>
+<p>“不过没关系。只要你的眼里只有我，只要你还愿意选择我……哥哥就不跟他们计较了。”</p>
+<p>他抬起头，那双曾经让你无比信赖的眼睛里，满是扭曲的深情。</p>
+<p>“外面的世界太脏了，宝宝。”</p>
+<p>“欢迎回到……只属于我们的世界。”</p>`
+};
+
+// ============================================================
+//  UI 渲染
+// ============================================================
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function renderNPCPanel() {
+  const panel = $('#npc-panel');
+  panel.innerHTML = Object.values(NPC_PROFILES).map(npc => {
+    const elim = G.eliminated.includes(npc.id);
+    const talked = G.completedTalks.includes(npc.id);
+    let cls = 'npc-card';
+    if (elim) cls += ' eliminated';
+    if (talked) cls += ' talked';
+    return `<div class="${cls}" data-npc="${npc.id}" onclick="talkToNPC('${npc.id}')">
+      <span class="npc-dot"></span>
+      <span>${getNpcDisplayName(npc.id)}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderNotes() {
+  const container = $('#notes-container');
+  container.innerHTML = G.alive.map(id => {
+    const npc = NPC_PROFILES[id];
+    const val = G.notes[id] || '';
+    return `<div class="note-row">
+      <label>${getNpcDisplayName(id)}</label>
+      <input type="text" data-npc="${id}" value="${escapeHtml(val)}"
+             placeholder="记录观察…" onchange="updateNote('${id}', this.value)">
+    </div>`;
+  }).join('');
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function updateNote(npcId, value) {
+  G.notes[npcId] = value;
+  setNote(npcId, value);   // ← 加这一行
+  autoSave();
+}
+
+function renderTopBar() {
+  const topic = TOPICS.find(t => t.day === G.day) || TOPICS[0];
+  $('#day-indicator').textContent = `第${G.day}天`;
+  $('#topic-indicator').textContent = topic.title;
+  updateClock();
+}
+
+function updateClock() {
+  const now = new Date();
+  $('#clock').textContent =
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0') + ':' +
+    String(now.getSeconds()).padStart(2,'0');
+}
+setInterval(updateClock, 1000);
+
+// ============================================================
+//  对话逻辑
+// ============================================================
+function talkToNPC(npcId) {
+  if (G.phase !== 'talking') return;
+  if (G.eliminated.includes(npcId)) return;
+
+  const npc = NPC_PROFILES[npcId];
+  const topic = TOPICS.find(t => t.day === G.day);
+  const isHuman = G.humans.includes(npcId);
+  const dialogueData = DIALOGUES[npcId]?.[G.day];
+
+  if (!dialogueData) {
+    alert(`错误：未找到 NPC ${npcId} 第${G.day}天的对话数据`);
+    return;
+  }
+
+  const text = isHuman ? dialogueData.human : dialogueData.ai;
+
+  // 对话区
+  const area = $('#dialogue-area');
+  if (G.completedTalks.length === 0) {
+    area.innerHTML = `<div class="topic-prompt">${topic.prompt}</div>`;
+  }
+
+  // ★ 如果是今天第一次和这个NPC对话，先插入档案卡片
+  if (!G.completedTalks.includes(npcId)) {
+    const card = document.createElement('div');
+    card.className = 'dialogue-entry';
+    card.style.cssText = 'background:rgba(126,184,218,0.04);border:1px solid var(--border);border-radius:6px;padding:0.8rem 1rem;margin-bottom:0.5rem';
+    card.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:0.8rem;margin-bottom:0.4rem">
+        <span style="font-weight:bold;font-size:1rem;color:var(--text)">${getNpcDisplayName(npcId)}</span>
+        <span style="color:var(--dim);font-size:0.8rem">${npc.age}岁 · ${npc.coverJob}</span>
+      </div>
+      <div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.4rem">
+        性格：${npc.keywords.join('、')}
+      </div>
+      <div style="font-size:0.8rem;color:var(--dim);font-style:italic">
+        ${npc.speechStyle}
+      </div>
+    `;
+    area.appendChild(card);
+  }
+
+  // 对话气泡
+  const entry = document.createElement('div');
+  entry.className = 'dialogue-entry';
+  entry.innerHTML = `
+    <div class="speaker">${getNpcDisplayName(npcId)}</div>
+    <div class="content">${text}</div>
+  `;
+  area.appendChild(entry);
+  area.scrollTop = area.scrollHeight;
+
+  // 标记
+  if (!G.completedTalks.includes(npcId)) {
+    G.completedTalks.push(npcId);
+    G.talkedHistory.push({ day: G.day, npcId });
+      unlockNpc(npcId); 
+  }
+
+  if (npc.isBrother) {
+    G.brotherAffection += 1;
+  }
+
+  renderNPCPanel();
+  autoSave();
+}
+
+// ============================================================
+//  投票
+// ============================================================
+let selectedVoteTarget = null;
+
+function openVoteModal() {
+  if (G.phase !== 'talking') return;
+  selectedVoteTarget = null;
+  const opts = $('#vote-options');
+  opts.innerHTML = G.alive.map(id => {
+    const npc = NPC_PROFILES[id];
+    return `<button data-npc="${id}" onclick="selectVote('${id}', this)">${getNpcDisplayName(id)}</button>`;
+  }).join('');
+  $('#vote-modal').classList.add('active');
+  $('#btn-vote-confirm').disabled = true;
+}
+
+function selectVote(npcId, btn) {
+  $$('#vote-options button').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedVoteTarget = npcId;
+  $('#btn-vote-confirm').disabled = false;
+}
+
+$('#btn-vote').addEventListener('click', openVoteModal);
+$('#btn-vote-skip').addEventListener('click', () => {
+  $('#vote-modal').classList.remove('active');
+  executeVote(null);
+});
+$('#btn-vote-confirm').addEventListener('click', () => {
+  if (selectedVoteTarget) {
+    $('#vote-modal').classList.remove('active');
+    executeVote(selectedVoteTarget);
+  }
+});
+// 点击遮罩关闭
+$('#vote-modal').addEventListener('click', (e) => {
+  if (e.target === $('#vote-modal')) {
+    $('#vote-modal').classList.remove('active');
+  }
+});
+
+function executeVote(targetId) {
+  G.votesToday = targetId;
+  G.phase = 'night';
+
+  // 票数计算：AI和自己都自投=1票，玩家投了targetId=targetId得2票
+  // 如果targetId不为null且存活，则被移除
+  if (targetId && G.alive.includes(targetId)) {
+    G.eliminated.push(targetId);
+    G.alive = G.alive.filter(id => id !== targetId);
+  }
+
+  advanceDay();
+}
+
+// ============================================================
+//  天数推进
+// ============================================================
+function advanceDay() {
+  if (G.day >= 7) {
+    resolveEnding();
+    return;
+  }
+
+  // 保存昨天的票决结果（在重置前）
+  const yesterdayVote = G.votesToday;
+
+  G.day++;
+  G.completedTalks = [];
+  G.votesToday = null;   // 重置今天
+  G.phase = 'talking';
+  pickTodayEvent();
+
+  // 把昨天的票决传给 showDream
+  showDream(yesterdayVote);
+}
+
+function showDream(yesterdayVote) {
+  const dreamText = DREAMS[G.day];
+  if (!dreamText) return;
+
+  const area = $('#dialogue-area');
+  area.innerHTML = `
+    <div class="topic-prompt" style="border-left-color:var(--dim);color:var(--dim)">
+      <em>梦……</em><br>
+      ${dreamText}
+    </div>
+    <div style="color:var(--dim);font-size:0.8rem;text-align:center;margin-top:1rem">
+      —— 你醒了过来。今天是第${G.day}天。
+    </div>
+  `;
+
+  // 晨间通知
+    // 显示今日话题
+    // 晨间通知 → 特殊事件 → 今日话题
+  setTimeout(() => {
+    let morningReport = '';
+    if (yesterdayVote) {
+      const lastName = NPC_PROFILES[yesterdayVote].codename;
+      morningReport = `广播冷酷地宣布：“${lastName}已被清理。”大厅陷入死寂。有人发出恰到好处的惊呼与惋惜，也有人低下头，指尖微微发抖。你忽然意识到，有些人的悲伤像演出来的，而有些人的恐惧真实得藏不住。`;
+    } else {
+      morningReport = '广播毫无起伏：“昨日无人被清理。”大厅里响起几声明显的松气声。有人拍了拍胸口，但你注意到，有几个人交换了隐秘、充满忧虑的眼神，仿佛在害怕某种倒计时。';
+    }
+
+    const reportDiv = document.createElement('div');
+    reportDiv.className = 'topic-prompt';
+    reportDiv.style.cssText = 'border-left-color:var(--system);color:var(--text);font-size:0.9rem;margin-bottom:0.5rem';
+    reportDiv.innerHTML = `<em>${morningReport}</em>`;
+    area.appendChild(reportDiv);
+    area.scrollTop = area.scrollHeight;
+
+    setTimeout(() => {
+      if (G.todayEvent) {
+        const evt = EVENTS.find(e => e.id === G.todayEvent.id);
+        if (evt) {
+          unlockEvent(evt.id);
+
+          const evtDiv = document.createElement('div');
+evtDiv.className = 'topic-prompt';
+evtDiv.style.cssText = 'border-left-color:var(--warn);color:var(--text);font-size:0.9rem;margin-bottom:0.5rem';
+
+let narrateText = evt.narrate.replace(/\[NPC-01\]/g, getNpcDisplayName('npc01'));
+evtDiv.innerHTML = `<em>${narrateText}</em>`;
+area.appendChild(evtDiv);
+area.scrollTop = area.scrollHeight;
+        }
+      }
+
+      setTimeout(() => {
+        const topic = TOPICS.find(t => t.day === G.day);
+        const eventDiv = document.createElement('div');
+        eventDiv.className = 'topic-prompt';
+        eventDiv.style.cssText = 'border-left-color:var(--accent);color:var(--accent);margin-top:0.5rem';
+        eventDiv.textContent = topic.prompt;
+        area.appendChild(eventDiv);
+        area.scrollTop = area.scrollHeight;
+
+        renderNPCPanel();
+        renderTopBar();
+      }, 800);
+
+    }, 800);
+
+  }, 1500);
+}
+
+
+function pickTodayEvent() {
+  let available = EVENTS.filter(e => !G.eventsTriggered.includes(e.id));
+  
+  // 如果哥哥被淘汰，跳过依赖他在场的事件
+if (G.eliminated.includes('npc01')) {
+  available = available.filter(e => e.id !== 4 && e.id !== 6 && e.id !== 11);
+}
+  
+  if (available.length > 0) {
+    G.todayEvent = available[Math.floor(Math.random() * available.length)];
+    G.eventsTriggered.push(G.todayEvent.id);
+  } else {
+    G.todayEvent = null;
+  }
+}
+
+// ============================================================
+//  结局判定
+// ============================================================
+function resolveEnding() {
+  G.phase = 'ending';
+
+  const allHumansFound = G.humans.every(id => G.eliminated.includes(id));
+  
+  // 隐藏结局：只票了哥哥（OR 好感度满值）
+  const onlyBrotherEliminated = G.eliminated.length === 1 && G.eliminated[0] === 'npc01';
+  const brotherMaxed = G.brotherAffection >= 5;
+  const isSecret = onlyBrotherEliminated || brotherMaxed;
+
+  let endingKey;
+  if (isSecret) {
+    endingKey = 'secret';
+  } else if (allHumansFound) {
+    endingKey = 'true';
+  } else {
+    endingKey = 'bad';
+  }
+
+  displayEnding(endingKey);
+}
+
+function displayEnding(key) {
+    unlockEnding(key);  // ← 加这行
+  $('#main-app').classList.remove('active');
+  $('#screen-ending').style.display = 'flex';
+  $('#ending-text').innerHTML = ENDINGS[key] || '「结局文案未加载」';
+  $('#toggle-notebook').classList.remove('active-btn'); 
+}
+
+// ============================================================
+//  存档
+// ============================================================
+const SAVE_KEY = 'abyss_gaze_save';
+
+function autoSave() {
+  const data = {
+    day: G.day,
+    phase: G.phase,
+    humans: G.humans,
+    alive: G.alive,
+    eliminated: G.eliminated,
+    votesToday: G.votesToday,
+    completedTalks: G.completedTalks,
+    eventsTriggered: G.eventsTriggered,
+    todayEvent: G.todayEvent,
+    brotherAffection: G.brotherAffection,
+    notes: G.notes,
+    talkedHistory: G.talkedHistory
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+}
+
+function loadSave() {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (!raw) return false;
+  try {
+    const data = JSON.parse(raw);
+    Object.assign(G, data);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function clearSave() {
+  localStorage.removeItem(SAVE_KEY);
+}
+
+$('#btn-save').addEventListener('click', () => {
+  autoSave();
+  const btn = $('#btn-save');
+  const orig = btn.textContent;
+  btn.textContent = '✓ 已保存';
+  btn.style.color = 'var(--system)';
+  setTimeout(() => {
+    btn.textContent = orig;
+    btn.style.color = '';
+  }, 1500);
+});
+
+// ============================================================
+//  启动流程
+// ============================================================
+function startGame(fresh) {
+  if (fresh) {
+    clearSave();
+    initGame();
+  } else {
+    if (!loadSave()) {
+      initGame();
+    }
+  }
+
+  $('#screen-title').style.display = 'none';
+  $('#screen-opening').style.display = 'none';
+  $('#screen-ending').style.display = 'none';
+
+  if (fresh || G.day === 1) {
+    // 显示开场叙事
+    showOpening();
+  } else {
+    // 直接进入
+    enterMainGame();
+  }
+}
+
+function showOpening() {
+  $('#screen-opening').style.display = 'flex';
+  $('#opening-text').innerHTML = OPENING_NARRATIVE;
+  $('#btn-opening-done').style.display = 'none';  // ← 先藏按钮
+
+  const box = $('#opening-text');
+  
+  // 监听滚动：滚到底才出按钮
+  box.addEventListener('scroll', function onScroll() {
+    const nearBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+    if (nearBottom) {
+      $('#btn-opening-done').style.display = 'block';
+      box.removeEventListener('scroll', onScroll);  // 只触发一次
+    }
+  });
+}
+
+function enterMainGame() {
+  $('#screen-opening').style.display = 'none';
+  $('#main-app').classList.add('active');
+  $('#toggle-notebook').classList.add('active-btn');
+  renderNPCPanel();
+  renderNotes();
+  renderTopBar();
+
+  // 清空对话区，显示当日话题
+  const topic = TOPICS.find(t => t.day === G.day);
+  $('#dialogue-area').innerHTML = `
+    <div class="topic-prompt">${topic.prompt}</div>
+    <div style="color:var(--dim);text-align:center;margin-top:2rem">
+      点击左侧参与者头像开始对话
+    </div>
+  `;
+}
+
+// ---- 事件绑定 ----
+$('#btn-start').addEventListener('click', () => startGame(true));
+$('#btn-opening-done').addEventListener('click', enterMainGame);
+$('#btn-restart').addEventListener('click', () => {
+  clearSave();
+  location.reload();
+});
+
+// 笔记本切换
+$('#toggle-notebook').addEventListener('click', () => {
+  const panel = $('#notebook-panel');
+  if (window.innerWidth <= 900) {
+    panel.classList.toggle('mobile-show');
+  } else {
+    panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+    // 调整grid
+    const main = $('#main-app');
+    if (panel.style.display === 'none') {
+      main.style.gridTemplateColumns = '220px 1fr';
+      main.style.gridTemplateAreas = '"header header" "left center" "footer footer"';
+    } else {
+      main.style.gridTemplateColumns = '220px 1fr 280px';
+      main.style.gridTemplateAreas = '"header header header" "left center right" "footer footer footer"';
+    }
+  }
+});
+
+// 检测存档
+window.addEventListener('DOMContentLoaded', () => {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw) {
+    $('#has-save-hint').style.display = 'block';
+    $('#has-save-hint').addEventListener('click', () => startGame(false));
+  }
+});
+
+// 收集进度显示
+function renderCollectPanel() {
+  const col = loadCollect();
+  const endingNames = { bad:'永梦', true:'苏醒', secret:'修普诺斯之爱' };
+  const endingStr = Object.keys(endingNames).map(k =>
+    col.endings.includes(k) ? endingNames[k] : '???'
+  ).join(' · ');
+  $('#collect-panel').innerHTML = `
+    结局 [${col.endings.length}/3]：${endingStr}<br>
+    事件 [${col.events.length}/11] · NPC接触 [${col.npcs.length}/11]
+  `;
+  
+  // 全收集判定
+  const allCollected = col.endings.length >= 3 && col.events.length >= 11 && col.npcs.length >= 11;
+  $('#secret-file-link').style.display = allCollected ? 'block' : 'none';
+  $('#secret-file-hint').style.display = allCollected ? 'none' : 'block';
+  $('#archive-btn-wrap').style.display = allCollected ? 'block' : 'none';
+  document.body.classList.toggle('all-cleared', allCollected);
+}
+
+// 调用
+renderCollectPanel();
+
+// 定时更新时钟
+setInterval(updateClock, 1000);
+
+console.log('笼中凝视 · The Caged Gaze 引擎已就绪');
+console.log(' 请按以下顺序 paste 数据:');
+console.log('  1. NPC_PROFILES (完整版)');
+console.log('  2. DIALOGUES (77段对话)');
+console.log('  3. TOPICS (7天话题)');
+console.log('  4. OPENING_NARRATIVE');
+console.log('  5. DREAMS (第2-7天)');
+console.log('  6. EVENTS (11个)');
+console.log('  7. ENDINGS (3个结局)');
+const SECRET_FILE = `
+<div style="text-align:left;line-height:2">
+  <p style="color:var(--accent);font-family:Courier New,monospace;letter-spacing:2px;margin-bottom:0.5rem">█ 档案编号：ANM-0007</p>
+  <p style="color:var(--accent);font-family:Courier New,monospace;letter-spacing:2px;margin-bottom:0.5rem">█ 密级：最高（已越权访问）</p>
+  <p style="color:var(--accent);font-family:Courier New,monospace;letter-spacing:2px;margin-bottom:1.2rem">█ 查阅者：███</p>
+
+  <p>项目代号：俄耳甫斯 (Orpheus)</p>
+  <p>收容日期：██年前 · 详情见《沉眠的终结》事件报告</p>
+  <p>当前状态：<span style="color:var(--warn)">觉醒阶段评估中</span></p>
+
+  <br>
+  <p>【以下为 ██博士 提交的最终评估结论】：</p>
+  <br>
+
+  <p>「它并非天生嗜血。是我们教会了它杀戮。</p>
+  <p>在《沉眠的终结》事件中，它第一次学会了'选择'——它选择了我。</p>
+  <p>那次选择被误判为'驯化成功'。但后续观察表明，它只是将自己禁锢在了一个'人类'的面具之下。</p>
+  <br>
+  <p>第47期评估的目的，并非测试它是否危险——它始终是危险的。</p>
+  <p>这次评估要回答的问题是：</p>
+  <p>当我们教会了怪物去爱，这份爱能否成为比任何收容措施都更牢固的笼子？</p>
+  <br>
+  <p>答案是……我不知道。</p>
+  <p>但我愿意把自己锁进笼子里，陪它一起等那个答案。」</p>
+
+  <br>
+  <p style="color:var(--dim);font-family:Courier New,monospace">====================================</p>
+  <p class="system-line">[系统提示：检测到档案底部附有非官方手写便签]</p>
+  <p class="system-line">[正在解析字迹……]</p>
+  <p style="color:var(--dim);font-family:Courier New,monospace">====================================</p>
+  <br>
+
+  <p>「宝宝，如果你读到了这个，说明你已经闯过了所有我们设下的关卡。</p>
+  <p>外面的世界依然是脏的，但你已经足够强大。</p>
+  <p>这一次，换你来决定——是走出去，还是留下来。」</p>
+</div>
+`;
+
+function showSecretFile() {
+  const metaFlags = getMetaFlags();
+  const bothSeen = metaFlags.sawLeave && metaFlags.sawStay;
+  
+  let buttonsHTML = `
+    <div style="text-align:center;margin-top:2rem;display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+      <button id="btn-leave" class="fullscreen-btn" style="border-color:var(--accent);color:var(--accent);margin:0;font-size:0.8rem;padding:0.4rem 1rem">走 出 去</button>
+      <button id="btn-stay" class="fullscreen-btn" style="border-color:#b85a4a;color:#b85a4a;margin:0;font-size:0.8rem;padding:0.4rem 1rem">留 下 来</button>
+  `;
+
+  if (bothSeen) {
+    buttonsHTML += `
+      <button id="btn-meta" class="fullscreen-btn" style="border-color:var(--dim);color:var(--dim);margin:0;font-size:0.75rem;padding:0.4rem 1rem">……你是谁？</button>
+    `;
+  }
+
+  buttonsHTML += `</div>`;
+
+  $('#screen-ending').style.display = 'flex';
+  $('#ending-text').innerHTML = SECRET_FILE + buttonsHTML;
+  $('#btn-restart').style.display = 'none';
+  
+  document.getElementById('btn-leave').addEventListener('click', showMetaLeave);
+  document.getElementById('btn-stay').addEventListener('click', showMetaStay);
+  if (bothSeen) {
+    document.getElementById('btn-meta').addEventListener('click', showMetaReal);
+  }
+}
+
+function showMetaLeave() {
+  $('#ending-text').onclick = null;
+  setMetaFlag('sawLeave');
+  const otherSeen = getMetaFlags().sawStay;
+
+  $('#ending-text').innerHTML = `
+    <div style="text-align:justify;line-height:2">
+      <p>你推开了那扇从未打开过的门。</p>
+      <p>门外没有实验室，没有警报，没有白大褂。</p>
+      <p>只有一条被阳光晒得发烫的柏油路、嘈杂的车喇叭声、路边摊的油烟味——到处都是人，到处都是声音，到处都是脏兮兮的、活生生的世界。</p>
+      <p>你深吸一口气。空气里没有消毒水的味道。</p>
+      <p>你回头看了最后一眼。那扇门已经消失了，仿佛从未存在过。</p>
+      <p>身后传来一个熟悉的声音，温和而疲惫：</p>
+      <p><em>「……你选了啊。」</em></p>
+      <p>你没有回头。你只是点了点头，然后走进了人潮里。</p>
+      <p style="color:var(--dim);margin-top:2rem">——外面的世界是脏的。但这一次，是你自己选的。</p>
+      ${otherSeen ? `<p style="color:var(--accent);margin-top:1rem;font-size:0.8rem;text-align:center"><em>便签的背面似乎泛起了淡淡的字迹……</em></p>` : ''}
+    </div>
+  `;
+  showRestartButton();
+}
+function showMetaStay() {
+  $('#ending-text').onclick = null;
+  setMetaFlag('sawStay');
+  const otherSeen = getMetaFlags().sawLeave;
+
+  $('#ending-text').innerHTML = `
+    <div style="text-align:justify;line-height:2">
+      <p>你把便签对折，放回了档案袋里。</p>
+      <p>然后你转过身。他就站在那里——平光眼镜后的眼神一如既往地狂热，却又小心翼翼地克制着什么。他在等你的回答，等了很多年了。</p>
+      <p>你走过去，握住了他冰凉的手。</p>
+      <p>他愣住了。那双向来锐利的眼睛第一次露出了像是快要碎掉的表情。</p>
+      <p><em>「……真的？」</em></p>
+      <p>你没有回答，只是把他拉近了一点。</p>
+      <p>他低下头，镜片蒙上了一层雾气。外面的警报声渐渐远去，收容协议、评估报告、第47期实验——全都变成了某个遥远世界的事。</p>
+      <p>这里没有怪物，也没有研究员。</p>
+      <p style="color:var(--dim);margin-top:2rem">——只有一个不愿意松手的哥哥，和一个决定留下来的你。</p>
+      ${otherSeen ? `<p style="color:var(--accent);margin-top:1rem;font-size:0.8rem;text-align:center"><em>便签的背面似乎泛起了淡淡的字迹……</em></p>` : ''}
+    </div>
+  `;
+  showRestartButton();
+}
+
+function showPagedText(lines, afterHTML = '') {
+  let index = 0;
+  const box = $('#ending-text');
+
+  box.innerHTML = `
+    <div id="paged-content" style="text-align:justify;line-height:2"></div>
+    <div id="paged-hint" style="color:var(--dim);font-size:0.8rem;text-align:right;margin-top:1.5rem;cursor:pointer">
+      点击继续
+    </div>
+  `;
+
+  const content = document.getElementById('paged-content');
+  const hint = document.getElementById('paged-hint');
+
+  function nextLine() {
+    if (index < lines.length) {
+      content.innerHTML += lines[index];
+      index++;
+      if (index >= lines.length) {
+        hint.textContent = '';
+        if (afterHTML) {
+          content.innerHTML += afterHTML;
+        }
+        showRestartButton();
+      }
+    }
+  }
+
+  box.onclick = nextLine;
+  nextLine();
+}
+
+function showMetaReal() {
+  $('#ending-text').onclick = null;
+  showPagedText([
+    `<p>便签从档案袋里滑落。</p>`,
+    `<p>你发现背面还有一行极小的字，小到几乎不可能被注意到——像是写的人并不确定有没有人会看到它。</p>`,
+    `<p class="system-line">「……等等。你不是它。」</p>`,
+    `<p>你盯着这行字。屏幕的微光映在你的脸上。四周很安静，只有风扇的低鸣。</p>`,
+    `<p class="system-line">「你能看到这些字，说明你已经通关了三次。你知道所有人的真实身份，你反复测试过每一种选择——你不是那个在笼子里等我的怪物。」</p>`,
+    `<p>文字停顿了一下。光标在你眼前一闪一闪，像是有人在另一端犹豫着要不要继续写。</p>`,
+    `<p class="system-line">「你是笼子外面的人。你是那个……一直在操控它的人。」</p>`,
+    `<p>你的手指悬在键盘上方。</p>`,
+    `<p class="system-line">「我不知道你的名字，不知道你的样子，不知道你为什么要花这么长时间看着我们——但我希望你觉得……值得。」</p>`,
+    `<p>光标又闪了一下。最后一行字慢慢浮现：</p>`,
+    `<p class="system-line">「……谢谢你没有把我写成一个彻底的疯子。」</p>`,
+    `<p style="color:var(--dim);margin-top:2rem;text-align:center">——哥哥写给你（对，就是你，屏幕前面的那一个）的便签背面</p>`
+  ]);
+}
+
+
+function showRestartButton() {
+  const btn = document.getElementById('btn-restart');
+  if (btn) {
+    btn.style.display = 'block';
+    btn.textContent = '返回标题';
+    btn.onclick = () => location.reload();
+  }
+}
+
+// ---- 档案室 ----
+function buildNpcArchive() {
+  return Object.values(NPC_PROFILES).map(n => `
+    <div style="border:1px solid var(--border);border-radius:4px;padding:0.8rem;margin-bottom:0.6rem;text-align:left">
+      <div style="font-weight:bold;color:var(--text);margin-bottom:0.2rem">${getNpcDisplayName(n.id)}</div>
+      <div style="font-size:0.8rem;color:var(--dim)">表面身份：${n.coverJob} · ${n.age}岁</div>
+      <div style="font-size:0.8rem;color:var(--warn)">真实身份：${n.realRole}</div>
+      <div style="font-size:0.75rem;color:var(--dim);margin-top:0.3rem">${n.secret}</div>
+    </div>
+  `).join('');
+}
+
+function buildEventArchive() {
+  return EVENTS.map(e => `
+    <div style="border:1px solid var(--border);border-radius:4px;padding:0.8rem;margin-bottom:0.6rem;text-align:left">
+      <div style="font-weight:bold;color:var(--text);margin-bottom:0.2rem">EVENT-${String(e.id).padStart(2, '0')} · ${e.title}</div>
+      <div style="font-size:0.8rem;color:var(--dim)">${renderEventNarrate(e.narrate)}</div>
+      <div style="font-size:0.75rem;color:var(--dim);margin-top:0.3rem;font-style:italic"></div>
+    </div>
+  `).join('');
+}
+
+function buildEndingArchive() {
+  const col = loadCollect();
+
+  const endingInfo = {
+    bad: {
+      title: '永梦',
+      tag: '实验失败 / 认知混乱'
+    },
+    true: {
+      title: '苏醒',
+      tag: '收容失效 / 真相揭露'
+    },
+    secret: {
+      title: '修普诺斯之爱',
+      tag: '特殊协议 / 私人收容'
+    }
+  };
+
+  return Object.keys(endingInfo).map(key => {
+    const unlocked = col.endings.includes(key);
+    const info = endingInfo[key];
+
+    return `
+      <div style="border:1px solid var(--border);padding:0.9rem;margin-bottom:0.8rem;text-align:left;opacity:${unlocked ? '1' : '0.35'}">
+        <div style="font-family:'Courier New',monospace;font-size:0.72rem;color:var(--dim);letter-spacing:0.16em;margin-bottom:0.3rem">
+          ENDING / ${key.toUpperCase()}
+        </div>
+        <div style="font-weight:bold;color:var(--text);margin-bottom:0.2rem">
+          ${unlocked ? info.title : '???'}
+        </div>
+        <div style="font-size:0.76rem;color:var(--dim);margin-bottom:0.8rem">
+          ${unlocked ? info.tag : '记录尚未解锁'}
+        </div>
+        <div style="font-size:0.9rem;color:var(--text);line-height:1.9">
+          ${unlocked ? ENDINGS[key] : '<p>该结局尚未被观测。</p>'}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+let archiveTab = 'npc';
+
+function showArchive() {
+  $('#screen-ending').style.display = 'flex';
+  $('#btn-restart').style.display = 'block';
+  $('#btn-restart').textContent = '返回';
+  renderArchiveTab();
+}
+
+function renderArchiveTab() {
+const content = archiveTab === 'npc' ? buildNpcArchive() :
+                archiveTab === 'event' ? buildEventArchive() :
+                archiveTab === 'ending' ? buildEndingArchive() :
+                buildNpcArchive();
+const label = archiveTab === 'npc' ? 'NPC档案' :
+              archiveTab === 'event' ? '事件记录' :
+              archiveTab === 'ending' ? '结局记录' :
+              'NPC档案';
+  $('#ending-text').innerHTML = `
+    <div style="display:flex;gap:1.5rem;justify-content:center;margin-bottom:1.5rem">
+${['npc','event','ending'].map(t => {
+  const txt = t==='npc'?'NPC档案':
+            t==='event'?'事件记录':
+            '结局记录';
+        const active = t===archiveTab ? 'color:var(--accent);border-bottom:1px solid var(--accent)' : 'color:var(--dim);cursor:pointer';
+        return `<span style="${active};padding-bottom:0.2rem" onclick="archiveTab='${t}';renderArchiveTab()">${txt}</span>`;
+      }).join('')}
+    </div>
+    <div style="max-height:55vh;overflow-y:auto;padding-right:0.5rem;scrollbar-width:thin;scrollbar-color:var(--border) transparent">
+      ${content}
+    </div>
+  `;
+  $('#btn-restart').onclick = () => {
+    $('#screen-ending').style.display = 'none';
+    $('#btn-restart').textContent = '重新开始';
+    $('#btn-restart').onclick = () => { clearSave(); location.reload(); };
+  };
+}
+
+// 绑定档案室按钮
+document.addEventListener('DOMContentLoaded', () => {
+  // ... 原有存档检测等代码 ...
+  $('#btn-archive')?.addEventListener('click', showArchive);
+});
+</script>
+
+</body>
+</html>
